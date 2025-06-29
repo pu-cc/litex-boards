@@ -129,6 +129,41 @@ def pmods_io(pmod):
 ]
 _pmods_io = pmods_io("PMOD")
 
+def eth_lan8720_rmii_pmod_io(pmod):
+    # Lan8720 RMII PHY "PMOD": To be used as a PMOD, MDIO should be disconnected and TX1 connected to PMOD8 IO.
+    return [
+        ("eth_rmii_clocks", 0,
+            Subsignal("ref_clk", Pins(f"{pmod}:6")),
+        ),
+        ("eth_rmii", 0,
+            Subsignal("rx_data", Pins(f"{pmod}:5 {pmod}:1")),
+            Subsignal("crs_dv",  Pins(f"{pmod}:2")),
+            Subsignal("tx_en",   Pins(f"{pmod}:4")),
+            Subsignal("tx_data", Pins(f"{pmod}:0 {pmod}:7")),
+        ),
+    ]
+
+# Extensions ---------------------------------------------------------------------------------------
+
+def eth_rtl8211_rgmii_io(bank):
+    return [
+        # https://github.com/intergalaktik/Extension_Boards_for_Olimex_GateMate/tree/main/ethIO
+        ("eth_ref_clk", 0, Pins(f"{bank}:18")),
+        ("eth_clocks", 0,
+            Subsignal("tx",      Pins(f"{bank}:10"), Misc("slew=fast")),
+            Subsignal("rx",      Pins(f"{bank}:9")),
+        ),
+        ("eth", 0,
+            Subsignal("rst_n",   Pins(f"{bank}:16")),
+            Subsignal("mdio",    Pins(f"{bank}:5")),
+            Subsignal("mdc",     Pins(f"{bank}:17"), Misc("slew=fast")),
+            Subsignal("rx_ctl",  Pins(f"{bank}:3")),
+            Subsignal("rx_data", Pins(f"{bank}:4 {bank}:6 {bank}:7 {bank}:8")),
+            Subsignal("tx_ctl",  Pins(f"{bank}:15"), Misc("slew=fast")),
+            Subsignal("tx_data", Pins(f"{bank}:11 {bank}:12 {bank}:13 {bank}:14"), Misc("slew=fast")),
+        )
+    ]
+
 # Platform -----------------------------------------------------------------------------------------
 
 class Platform(CologneChipPlatform):

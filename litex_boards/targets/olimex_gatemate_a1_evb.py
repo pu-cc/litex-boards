@@ -23,6 +23,8 @@ from litex.build.generic_platform import Pins
 from litex.soc.cores.led import LedChaser
 from litex.soc.cores.video import VideoVGAPHY
 
+from liteeth.phy.gatematergmii import LiteEthPHYRGMII
+
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -56,6 +58,7 @@ class _CRG(LiteXModule):
             pll_video.create_clkout(self.cd_vga, 65e6)
             platform.add_period_constraint(self.cd_vga.clk, 1e9/65e6)
 
+
 # BaseSoC ------------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
@@ -63,6 +66,7 @@ class BaseSoC(SoCCore):
         with_video_terminal = False,
         with_ethernet       = False,
         with_etherbone      = False,
+        eth_phy             = "rmii",
         eth_ip              = "192.168.1.50",
         remote_ip           = None,
         with_led_chaser     = True,
@@ -90,28 +94,22 @@ class BaseSoC(SoCCore):
 
         # Ethernet / Etherbone ---------------------------------------------------------------------
         if with_ethernet or with_etherbone:
-            from litex.build.generic_platform import Subsignal
-            def eth_lan8720_rmii_pmod_io(pmod):
-                # Lan8720 RMII PHY "PMOD": To be used as a PMOD, MDIO should be disconnected and TX1 connected to PMOD8 IO.
-                return [
-                    ("eth_rmii_clocks", 0,
-                        Subsignal("ref_clk", Pins(f"{pmod}:6")),
-                    ),
-                    ("eth_rmii", 0,
-                        Subsignal("rx_data", Pins(f"{pmod}:5 {pmod}:1")),
-                        Subsignal("crs_dv",  Pins(f"{pmod}:2")),
-                        Subsignal("tx_en",   Pins(f"{pmod}:4")),
-                        Subsignal("tx_data", Pins(f"{pmod}:0 {pmod}:7")),
-                    ),
-                ]
-            platform.add_extension(eth_lan8720_rmii_pmod_io("PMOD"))
-
-            from liteeth.phy.rmii import LiteEthPHYRMII
-            self.ethphy = LiteEthPHYRMII(
-                clock_pads = platform.request("eth_rmii_clocks"),
-                pads       = platform.request("eth_rmii"),
-                refclk_cd  = None
-            )
+            if eth_phy == "rmii":
+                platform.add_extension(olimex_gatemate_a1_evb.eth_lan8720_rmii_pmod_io("PMOD"))
+                from liteeth.phy.rmii import LiteEthPHYRMII
+                self.ethphy = LiteEthPHYRMII(
+                    clock_pads = platform.request("eth_rmii_clocks"),
+                    pads       = platform.request("eth_rmii"),
+                    refclk_cd  = None
+                )
+            if eth_phy == "rgmii":
+                platform.add_extension(olimex_gatemate_a1_evb.eth_rtl8211_rgmii_io("bank_na1"))
+                self.ethphy = LiteEthPHYRGMII(
+                    clock_pads = platform.request("eth_clocks"),
+                    pads       = platform.request("eth"),
+                    tx_delay   = 0.0e-10, # RTL8211E adds 2ns TXDLY=1
+                    rx_delay   = 0.0e-10, # RTL8211E adds 2ns RXDLY=1
+                    )
 
         if with_ethernet:
             self.add_ethernet(phy=self.ethphy, local_ip=eth_ip, remote_ip=remote_ip, software_debug=False)
@@ -125,12 +123,15 @@ def main():
     parser = LiteXArgumentParser(platform=olimex_gatemate_a1_evb.Platform, description="LiteX SoC on Olimex Gatemate A1 EVB")
     parser.add_target_argument("--sys-clk-freq",        default=24e6, type=float, help="System clock frequency.")
     parser.add_target_argument("--with-video-terminal", action="store_true",      help="Enable Video Terminal (VGA).")
+    parser.add_target_argument("--video-interface",     default="gpdi",           help="Select Video Interface (VGA or GPDI).")
     parser.add_target_argument("--flash",               action="store_true",      help="Flash bitstream.")
     pmodopts = parser.target_group.add_mutually_exclusive_group()
     pmodopts.add_argument("--with-spi-sdcard",          action="store_true",      help="Enable SPI-mode SDCard support.")
     pmodopts.add_argument("--with-sdcard",              action="store_true",      help="Enable SDCard support.")
-    pmodopts.add_argument("--with-ethernet",            action="store_true",      help="Enable Ethernet support.")
-    pmodopts.add_argument("--with-etherbone",           action="store_true",      help="Enable Etherbone support.")
+    ethopts = parser.target_group.add_mutually_exclusive_group()
+    ethopts.add_argument("--with-ethernet",             action="store_true",      help="Enable Ethernet support.")
+    ethopts.add_argument("--with-etherbone",            action="store_true",      help="Enable Etherbone support.")
+    parser.add_target_argument("--eth-phy",             default="rmmii",          help="Select Ethernet PHY (RMII or RGMII).")
     parser.add_target_argument("--eth-ip",              default="192.168.1.50",   help="Ethernet/Etherbone IP address.")
     parser.add_target_argument("--remote-ip",           default="192.168.1.100",  help="Remote IP address of TFTP server.")
 
@@ -142,6 +143,7 @@ def main():
         with_video_terminal = args.with_video_terminal,
         with_ethernet       = args.with_ethernet,
         with_etherbone      = args.with_etherbone,
+        eth_phy             = args.eth_phy,
         eth_ip              = args.eth_ip,
         remote_ip           = args.remote_ip,
         **parser.soc_argdict)
