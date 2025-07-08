@@ -23,6 +23,8 @@ from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.soc import SoCRegion
 
+from liteeth.phy.gatemate_1000basex import GateMate_1000BASEX
+
 from litex.build.generic_platform import Pins
 
 from litex.soc.cores.led import LedChaser
@@ -55,6 +57,8 @@ class _CRG(LiteXModule):
 class BaseSoC(SoCCore):
     def __init__(self, sys_clk_freq=48e6, toolchain="colognechip",
         with_l2_cache   = False,
+        with_ethernet   = False,
+        eth_phy         = "1000basex",
         with_led_chaser = True,
         with_spi_flash  = True,
         **kwargs):
@@ -104,6 +108,17 @@ class BaseSoC(SoCCore):
                 self.comb += self.hyperram_cache.slave.connect(self.hyperram.bus)
             else:
                 self.comb += hyperram_bus.connect(self.hyperram.bus)
+
+        # Ethernet ---------------------------------------------------------------------------------
+        if with_ethernet:
+            # 1000BaseX Ethernet PHY ---------------------------------------------------------------
+            if eth_phy == "1000basex":
+                # phy
+                self.ethphy = GateMate_1000BASEX(
+                    sys_clk_freq = self.clk_freq)
+
+            self.add_ethernet(phy=self.ethphy)
+
         # SPI Flash --------------------------------------------------------------------------------
         if with_spi_flash:
             from litespi.modules import MX25R6435F
@@ -127,11 +142,15 @@ def main():
     sdopts = parser.target_group.add_mutually_exclusive_group()
     sdopts.add_argument("--with-spi-sdcard",       action="store_true",      help="Enable SPI-mode SDCard support.")
     sdopts.add_argument("--with-sdcard",           action="store_true",      help="Enable SDCard support.")
+    parser.add_target_argument("--with-ethernet",  action="store_true",      help="Enable Ethernet support.")
+    parser.add_target_argument("--eth-phy",        default="1000basex",      help="Select Ethernet PHY (1000basex).")
     args = parser.parse_args()
 
     soc = BaseSoC(
         sys_clk_freq   = args.sys_clk_freq,
         toolchain      = args.toolchain,
+        with_ethernet  = args.with_ethernet,
+        eth_phy        = args.eth_phy,
         with_spi_flash = args.with_spi_flash,
         **parser.soc_argdict)
 
